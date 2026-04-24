@@ -1,0 +1,22 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+if ARCH_BOARD_CUSTOM_BLACKPILL_F411
+
+config BLACKPILL_F411_QETIMER
+	int "Timer to use with QE encoder"
+	default 3
+	depends on SENSORS_QENCODER
+	---help---
+		Selected timer for the PASIL Quadrature Encoder interface.
+
+# CHANGED: Removed joystick (Corporate Bloat) and added Motor PWM/Sensor config placeholders
+config BLACKPILL_F411_MOTOR_PWM_TIMER
+	int "Timer for TT DC Motor PWM"
+	default 4
+	---help---
+		Timer used to drive the external motor driver for the PASIL testbench.
+
+endif # ARCH_BOARD_CUSTOM_BLACKPILL_F411

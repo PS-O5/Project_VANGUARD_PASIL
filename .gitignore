@@ -1,0 +1,8 @@
+nuttx/*.bin
+nuttx/*.hex
+nuttx/*.elf
+nuttx/*.map
+nuttx/.config
+nuttx/savedefconfig
+*.o
+*.a
