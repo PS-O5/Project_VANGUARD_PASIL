@@ -251,6 +251,8 @@ stm32_bringup.o: stm32_bringup.c \
  /home/ps-o5/Projects/Project_VANGUARD-PASIL/nuttx/arch/arm/src/chip/stm32_lowputc.h \
  /home/ps-o5/Projects/Project_VANGUARD-PASIL/nuttx/arch/arm/src/chip/stm32_eth.h \
  /home/ps-o5/Projects/Project_VANGUARD-PASIL/nuttx/arch/arm/src/chip/stm32_uart.h \
+ /home/ps-o5/Projects/Project_VANGUARD-PASIL/nuttx/include/nuttx/sensors/bmi160.h \
+ /home/ps-o5/Projects/Project_VANGUARD-PASIL/nuttx/arch/arm/src/chip/stm32_i2c.h \
  /home/ps-o5/Projects/Project_VANGUARD-PASIL/nuttx/include/arch/board/board.h \
  blackpill-f411.h \
  /home/ps-o5/Projects/Project_VANGUARD-PASIL/nuttx/include/nuttx/board.h

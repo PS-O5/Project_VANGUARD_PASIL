@@ -30,12 +30,18 @@
 #include <syslog.h>
 #include <errno.h>
 
+#include <sys/mount.h>
+
 #include <nuttx/arch.h>
 #include <nuttx/sdio.h>
 #include <nuttx/mmcsd.h>
 
 #include <stm32.h>
 #include <stm32_uart.h>
+
+#include <nuttx/i2c/i2c_master.h>
+#include <nuttx/sensors/bmi160.h>
+#include "stm32_i2c.h"
 
 #include <arch/board/board.h>
 
@@ -81,6 +87,16 @@
 int stm32_bringup(void)
 {
   int ret = OK;
+
+  /* Seize control of the PROCFS mount */
+  syslog(LOG_INFO, "[BOOT] Hard-mounting PROCFS to /proc...\n");
+  ret = mount(NULL, "/proc", "procfs", 0, NULL);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Hardware mount of PROCFS failed.\n");
+    }
+
+  syslog(LOG_INFO, "[BOOT] Project VANGUARD PASIL: Booted!");
 
 #ifdef HAVE_LEDS
   /* Register the LED driver */
@@ -210,6 +226,30 @@ int stm32_bringup(void)
       return ret;
     }
 #endif
+
+
+#ifdef CONFIG_STM32_I2C1
+  struct i2c_master_s *i2c;
+
+  syslog(LOG_INFO, "Bringing up I2C1...\n");
+  i2c = stm32_i2cbus_initialize(1);
+  if (i2c == NULL)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize I2C1\n");
+    }
+  else
+    {
+      syslog(LOG_INFO, "I2C1 Initialized. Probing BMI160...\n");
+      
+      /* The legacy BMI160 driver manages the I2C address (0x68/0x69) internally */
+      ret = bmi160_register("/dev/imu0", i2c); 
+      if (ret < 0)
+        {
+          syslog(LOG_ERR, "ERROR: Failed to register BMI160: %d\n", ret);
+        }
+    }
+#endif
+
 
   return ret;
 }
