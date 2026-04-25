@@ -43,6 +43,11 @@
 #include <nuttx/sensors/bmi160.h>
 #include "stm32_i2c.h"
 
+#include <nuttx/sensors/bmi160.h>
+#include <nuttx/sensors/bmp280.h>
+//#include <nuttx/sensors/qmc5883l.h>
+#include <nuttx/sensors/vl53l1x.h>
+
 #include <arch/board/board.h>
 
 #ifdef CONFIG_USERLED
@@ -229,6 +234,8 @@ int stm32_bringup(void)
 
 
 #ifdef CONFIG_STM32_I2C1
+  
+
   struct i2c_master_s *i2c;
 
   syslog(LOG_INFO, "Bringing up I2C1...\n");
@@ -239,15 +246,48 @@ int stm32_bringup(void)
     }
   else
     {
-      syslog(LOG_INFO, "I2C1 Initialized. Probing BMI160...\n");
+      syslog(LOG_INFO, "I2C1 Initialized.\n");
       
-      /* The legacy BMI160 driver manages the I2C address (0x68/0x69) internally */
-      ret = bmi160_register("/dev/imu0", i2c); 
+      /* THIS IS NEW: Expose the bus to the user-space NSH tool */
+      ret = i2c_register(i2c, 1);
       if (ret < 0)
         {
-          syslog(LOG_ERR, "ERROR: Failed to register BMI160: %d\n", ret);
+          syslog(LOG_ERR, "ERROR: Failed to register /dev/i2c1\n");
         }
+      else
+      {
+          syslog(LOG_INFO, "I2C1 bus registered at /dev/i2c1\n");
+      }
+      
+      
+      /*
+      syslog(LOG_INFO, "[PASIL] Registering Sensor Fleet...\n");
+      
+      // 1. IMU (Ensure address is set to 0x69 in menuconfig)
+      syslog(LOG_INFO, "--> Probing BMI160...\n");
+      ret = bmi160_register("/dev/imu0", i2c);
+      if (ret < 0) syslog(LOG_ERR, "ERROR: BMI160 failed: %d\n", ret);
+      syslog(LOG_INFO, "    BMI160 Return: %d\n", ret);
+
+      // 2. Barometer 
+      syslog(LOG_INFO, "--> Probing BMP280...\n");
+      ret = bmp280_register("/dev/baro0", i2c);
+      if (ret < 0) syslog(LOG_ERR, "ERROR: BMP280 failed: %d\n", ret);
+      syslog(LOG_INFO, "    BMP280 Return: %d\n", ret);
+
+      // 3. Magnetometer 
+      //ret = qmc5883l_register("/dev/mag0", i2c);
+      //if (ret < 0) syslog(LOG_ERR, "ERROR: QMC5883 failed: %d\n", ret);
+
+      // 4. Time-of-Flight Laser
+      syslog(LOG_INFO, "--> Probing VL53...\n");
+      ret = vl53l1x_register("/dev/tof0", i2c);
+      if (ret < 0) syslog(LOG_ERR, "ERROR: VL53L1X failed: %d\n", ret);
+      syslog(LOG_INFO, "    VL53 Return: %d\n", ret);
+    */
+
     }
+
 #endif
 
 
