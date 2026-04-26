@@ -1,3 +1,6 @@
-[submodule "PX4-Autopilot"]
-	path = PX4-Autopilot
-	url = https://github.com/PS-O5/PX4-Autopilot.git
+[submodule "nuttx"]
+	path = nuttx
+	url = https://github.com/apache/nuttx.git
+[submodule "nuttx-apps"]
+	path = nuttx-apps
+	url = https://github.com/apache/nuttx-apps.git
