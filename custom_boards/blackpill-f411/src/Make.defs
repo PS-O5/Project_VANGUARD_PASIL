@@ -7,16 +7,6 @@ include $(TOPDIR)/Make.defs
 # Baseline Boot & Bringup
 CSRCS = stm32_boot.c stm32_bringup.c pasil_ekf.c
 
-# --- KERNEL GRAFT: CMSIS MATRIX ENGINE ---
-CMSIS_MAT_DIR = $(TOPDIR)/../nuttx-apps/mlearning/cmsis/CMSIS_5/CMSIS/DSP/Source/MatrixFunctions
-VPATH += :$(CMSIS_MAT_DIR)
-
-# Compile matrices directly into the Kernel
-CSRCS += arm_mat_init_f32.c
-CSRCS += arm_mat_trans_f32.c
-CSRCS += arm_mat_mult_f32.c
-CSRCS += arm_mat_add_f32.c
-
 # Link the headers
 CFLAGS += -I$(TOPDIR)/../nuttx-apps/mlearning/cmsis/CMSIS_5/CMSIS/DSP/Include
 CFLAGS += -I$(TOPDIR)/../nuttx-apps/mlearning/cmsis/CMSIS_5/CMSIS/Core/Include
@@ -41,5 +31,16 @@ endif
 DEPPATH += --dep-path board
 VPATH += :board
 CFLAGS += ${INCDIR_PREFIX}$(TOPDIR)$(DELIM)arch$(DELIM)$(CONFIG_ARCH)$(DELIM)src$(DELIM)board$(DELIM)board
+
+# --- KERNEL GRAFT: CMSIS MATRIX ENGINE ---
+CMSIS_MAT_DIR = $(TOPDIR)/../nuttx-apps/mlearning/cmsis/CMSIS_5/CMSIS/DSP/Source/MatrixFunctions
+VPATH += :$(CMSIS_MAT_DIR)
+CSRCS += arm_mat_init_f32.c arm_mat_trans_f32.c arm_mat_mult_f32.c arm_mat_add_f32.c
 CFLAGS += -I$(TOPDIR)/../nuttx-apps/mlearning/cmsis/CMSIS_5/CMSIS/DSP/Include
 CFLAGS += -I$(TOPDIR)/../nuttx-apps/mlearning/cmsis/CMSIS_5/CMSIS/Core/Include
+
+# --- KERNEL GRAFT: STMICROELECTRONICS VL53L0X API (ISOLATED IP) ---
+VL53_DIR = vl53l0x_api
+VPATH += :$(VL53_DIR)
+CSRCS += vl53l0x_platform.c vl53l0x_api.c vl53l0x_api_core.c vl53l0x_api_calibration.c vl53l0x_api_strings.c
+CFLAGS += -I$(VL53_DIR)

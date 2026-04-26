@@ -308,17 +308,16 @@ int stm32_bringup(void)
       }
 
       /* * 2. Barometer 
-       * [ON HOLD] Pending Phase 2 Complementary Filter initialization.
        */
-      // syslog(LOG_INFO, "--> Probing BMP280...\n");
-      // ret = bmp280_register("/dev/baro0", i2c);
-      // if (ret < 0) syslog(LOG_ERR, "ERROR: BMP280 failed: %d\n", ret);
+       //syslog(LOG_INFO, "--> Probing BMP280...\n");
+       //ret = bmp280_register("/dev/baro0", i2c);
+       //if (ret < 0) syslog(LOG_ERR, "ERROR: BMP280 failed: %d\n", ret);
 
       /* * 3. Magnetometer 
-       * [ON HOLD] Pending Phase 3 EKF.
+       *[OBSOLETE] Directly injected in pasil_imu.c task.
        */
-      // ret = qmc5883l_register("/dev/mag0", i2c);
-      // if (ret < 0) syslog(LOG_ERR, "ERROR: QMC5883 failed: %d\n", ret);
+       //ret = qmc5883l_register("/dev/mag0", i2c);
+       //if (ret < 0) syslog(LOG_ERR, "ERROR: QMC5883 failed: %d\n", ret);
 
       /* * 4. Time-of-Flight Laser
        * [QUARANTINED] L1X driver polling loop hangs RTOS on L0X silicon. 
