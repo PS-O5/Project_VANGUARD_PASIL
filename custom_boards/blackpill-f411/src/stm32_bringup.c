@@ -43,10 +43,17 @@
 #include <nuttx/sensors/bmi160.h>
 #include "stm32_i2c.h"
 
+#include <nuttx/timers/pwm.h>
+#include "stm32_pwm.h"
+
+#include <stm32_gpio.h>
+#include <hardware/stm32_pinmap.h>
+
 #include <nuttx/sensors/bmi160.h>
 #include <nuttx/sensors/bmp280.h>
 //#include <nuttx/sensors/qmc5883l.h>
 #include <nuttx/sensors/vl53l1x.h>
+#include <sched.h>
 
 #include <arch/board/board.h>
 
@@ -70,6 +77,8 @@
 #if !defined(CONFIG_ARCH_LEDS) && defined(CONFIG_USERLED_LOWER)
 #  define HAVE_LEDS 1
 #endif
+
+extern int pasil_imu_task(int argc, char *argv[]);
 
 /****************************************************************************
  * Public Functions
@@ -234,8 +243,6 @@ int stm32_bringup(void)
 
 
 #ifdef CONFIG_STM32_I2C1
-  
-
   struct i2c_master_s *i2c;
 
   syslog(LOG_INFO, "Bringing up I2C1...\n");
@@ -248,48 +255,81 @@ int stm32_bringup(void)
     {
       syslog(LOG_INFO, "I2C1 Initialized.\n");
       
-      /* THIS IS NEW: Expose the bus to the user-space NSH tool */
+      /* Phase 2 Relic: Expose the bus to the user-space NSH tool for radar sweeps */
       ret = i2c_register(i2c, 1);
       if (ret < 0)
         {
           syslog(LOG_ERR, "ERROR: Failed to register /dev/i2c1\n");
         }
       else
-      {
+        {
           syslog(LOG_INFO, "I2C1 bus registered at /dev/i2c1\n");
-      }
+        }
       
-      
-      /*
       syslog(LOG_INFO, "[PASIL] Registering Sensor Fleet...\n");
       
-      // 1. IMU (Ensure address is set to 0x69 in menuconfig)
-      syslog(LOG_INFO, "--> Probing BMI160...\n");
+      /* 1. IMU - PHASE 1 TARGET ALOCKED */
+      syslog(LOG_INFO, "--> Probing BMI160 at /dev/imu0...\n");
+      /* NOTE: Change the sensor address in menuconfig to match with actual address */
       ret = bmi160_register("/dev/imu0", i2c);
-      if (ret < 0) syslog(LOG_ERR, "ERROR: BMI160 failed: %d\n", ret);
-      syslog(LOG_INFO, "    BMI160 Return: %d\n", ret);
+      if (ret < 0) {
+          syslog(LOG_ERR, "ERROR: BMI160 failed: %d\n", ret);
+      }
+      else
+      {
+          syslog(LOG_INFO, "    BMI160 Registered Successfully.\n");
 
-      // 2. Barometer 
-      syslog(LOG_INFO, "--> Probing BMP280...\n");
-      ret = bmp280_register("/dev/baro0", i2c);
-      if (ret < 0) syslog(LOG_ERR, "ERROR: BMP280 failed: %d\n", ret);
-      syslog(LOG_INFO, "    BMP280 Return: %d\n", ret);
+          syslog(LOG_INFO, "[PASIL] Arming Hardware PWM on TIM2...\n");
+          struct pwm_lowerhalf_s *pwm;
+      
+          syslog(LOG_INFO, "    Routing TIM2_CH2 to physical pin PA1 (AF1)...\n");
 
-      // 3. Magnetometer 
-      //ret = qmc5883l_register("/dev/mag0", i2c);
-      //if (ret < 0) syslog(LOG_ERR, "ERROR: QMC5883 failed: %d\n", ret);
+            pwm = stm32_pwminitialize(2);
+            if (!pwm) {
+                syslog(LOG_ERR, "ERROR: Failed to initialize TIM2 PWM\n");
+            }
+            else
+            {
+                ret = pwm_register("/dev/pwm0", pwm);
+                if (ret < 0) {
+                    syslog(LOG_ERR, "ERROR: Failed to register /dev/pwm0: %d\n", ret);
+                }
+                else {
+                    syslog(LOG_INFO, "    TIM2 PWM Registered Successfully at /dev/pwm0.\n");
+                }
+            }
 
-      // 4. Time-of-Flight Laser
-      syslog(LOG_INFO, "--> Probing VL53...\n");
-      ret = vl53l1x_register("/dev/tof0", i2c);
-      if (ret < 0) syslog(LOG_ERR, "ERROR: VL53L1X failed: %d\n", ret);
-      syslog(LOG_INFO, "    VL53 Return: %d\n", ret);
-    */
+          /*Spawn the IMU polling thread dynamically */
+          syslog(LOG_INFO, "[PASIL] Spawning Deterministic IMU Thread (Priority 255)...\n");
+          ret = task_create("pasil_imu", 255, 2048, pasil_imu_task, NULL);
+          if (ret < 0) {
+              syslog(LOG_ERR, "ERROR: Failed to spawn IMU task\n");
+          }
+      }
+
+      /* * 2. Barometer 
+       * [ON HOLD] Pending Phase 2 Complementary Filter initialization.
+       */
+      // syslog(LOG_INFO, "--> Probing BMP280...\n");
+      // ret = bmp280_register("/dev/baro0", i2c);
+      // if (ret < 0) syslog(LOG_ERR, "ERROR: BMP280 failed: %d\n", ret);
+
+      /* * 3. Magnetometer 
+       * [ON HOLD] Pending Phase 3 EKF.
+       */
+      // ret = qmc5883l_register("/dev/mag0", i2c);
+      // if (ret < 0) syslog(LOG_ERR, "ERROR: QMC5883 failed: %d\n", ret);
+
+      /* * 4. Time-of-Flight Laser
+       * [QUARANTINED] L1X driver polling loop hangs RTOS on L0X silicon. 
+       * Do NOT uncomment until a dynamic driver is written.
+       */
+      // syslog(LOG_INFO, "--> Probing VL53...\n");
+      // ret = vl53l1x_register("/dev/tof0", i2c);
+      // if (ret < 0) syslog(LOG_ERR, "ERROR: VL53L1X failed: %d\n", ret);
 
     }
-
 #endif
-
 
   return ret;
 }

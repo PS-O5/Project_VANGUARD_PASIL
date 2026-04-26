@@ -265,6 +265,8 @@
 #define GPIO_SPI2_MOSI   GPIO_SPI2_MOSI_1
 #define GPIO_SPI2_SCK    GPIO_SPI2_SCK_2
 
+
+
 /* LEDs
  *
  * The Nucleo F411RE board provide a single user LED, LD2.  LD2
@@ -329,5 +331,9 @@
 
 #define GPIO_TIM2_CH1IN (GPIO_TIM2_CH1IN_1 | GPIO_PULLUP)
 #define GPIO_TIM2_CH2IN (GPIO_TIM2_CH2IN_1 | GPIO_PULLUP)
+
+/* TIM2 PWM Alternate Function Mapping */
+#define GPIO_TIM2_CH2OUT GPIO_TIM2_CH2OUT_1
+
 
 #endif /* __BOARDS_ARM_STM32_NUCLEO_F411RE_INCLUDE_BOARD_H */
