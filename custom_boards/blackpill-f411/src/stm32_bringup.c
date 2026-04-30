@@ -43,10 +43,13 @@
 #include <nuttx/sensors/bmi160.h>
 #include "stm32_i2c.h"
 
+#include <nuttx/spi/spi.h>         
+
 #include <nuttx/timers/pwm.h>
 #include "stm32_pwm.h"
 
 #include <stm32_gpio.h>
+#include <stm32_exti.h>
 #include <hardware/stm32_pinmap.h>
 
 #include <nuttx/sensors/bmi160.h>
@@ -77,6 +80,32 @@
 #if !defined(CONFIG_ARCH_LEDS) && defined(CONFIG_USERLED_LOWER)
 #  define HAVE_LEDS 1
 #endif
+
+#ifdef CONFIG_WL_NRF24L01
+#include <nuttx/wireless/nrf24l01.h>
+#include "stm32_exti.h"
+#include "stm32_gpio.h"
+
+/* Forward declaration for the ISR hook */
+static int nrf24_irq_attach(xcpt_t isr, FAR void *arg)
+{
+  /* Attach PB5 to the falling edge EXTI interrupt */
+  return stm32_gpiosetevent(GPIO_NRF24L01_IRQ, false, true, false, isr, arg);
+}
+
+static void nrf24_chip_enable(bool enable)
+{
+  stm32_gpiowrite(GPIO_NRF24L01_CE, enable);
+}
+
+/* The strictly compliant configuration structure */
+static struct nrf24l01_config_s g_nrf24l01_config =
+{
+  .irqattach  = nrf24_irq_attach,
+  .chipenable = nrf24_chip_enable,
+};
+#endif
+
 
 extern int pasil_imu_task(int argc, char *argv[]);
 
@@ -277,34 +306,63 @@ int stm32_bringup(void)
       }
       else
       {
-          syslog(LOG_INFO, "    BMI160 Registered Successfully.\n");
+            syslog(LOG_INFO, "    BMI160 Registered Successfully.\n");
 
-          syslog(LOG_INFO, "[PASIL] Arming Hardware PWM on TIM2...\n");
-          struct pwm_lowerhalf_s *pwm;
-      
-          syslog(LOG_INFO, "    Routing TIM2_CH2 to physical pin PA1 (AF1)...\n");
+      /* ==========================================================
+       * PHASE 6B: KINETIC ACTUATION NETWORK (MX1508)
+       * ========================================================== */
+      syslog(LOG_INFO, "[PASIL] Arming Kinetic Actuation Network...\n");
+      struct pwm_lowerhalf_s *pwm2;
+      struct pwm_lowerhalf_s *pwm3;
 
-            pwm = stm32_pwminitialize(2);
-            if (!pwm) {
-                syslog(LOG_ERR, "ERROR: Failed to initialize TIM2 PWM\n");
-            }
-            else
+      /* 1. Initialize TIM2 (PA1, PA2, PA3 - Motors 1, 2, 3) */
+      syslog(LOG_INFO, "    Routing TIM2 (CH2, CH3, CH4) to /dev/pwm0...\n");
+      pwm2 = stm32_pwminitialize(2);
+      if (!pwm2)
+        {
+          syslog(LOG_ERR, "ERROR: Failed to initialize TIM2 PWM\n");
+        }
+      else
+        {
+          ret = pwm_register("/dev/pwm0", pwm2);
+          if (ret < 0)
             {
-                ret = pwm_register("/dev/pwm0", pwm);
-                if (ret < 0) {
-                    syslog(LOG_ERR, "ERROR: Failed to register /dev/pwm0: %d\n", ret);
-                }
-                else {
-                    syslog(LOG_INFO, "    TIM2 PWM Registered Successfully at /dev/pwm0.\n");
-                }
+              syslog(LOG_ERR, "ERROR: Failed to register /dev/pwm0: %d\n", ret);
             }
+          else
+            {
+              syslog(LOG_INFO, "    TIM2 PWM Registered Successfully at /dev/pwm0.\n");
+            }
+        }
 
-          /*Spawn the IMU polling thread dynamically */
-          syslog(LOG_INFO, "[PASIL] Spawning Deterministic IMU Thread (Priority 255)...\n");
-          ret = task_create("pasil_imu", 255, 2048, pasil_imu_task, NULL);
-          if (ret < 0) {
-              syslog(LOG_ERR, "ERROR: Failed to spawn IMU task\n");
-          }
+      /* 2. Initialize TIM3 (PA4 - Motor 4) */
+      syslog(LOG_INFO, "    Routing TIM3 (CH1) to /dev/pwm1...\n");
+      pwm3 = stm32_pwminitialize(3);
+      if (!pwm3)
+        {
+          syslog(LOG_ERR, "ERROR: Failed to initialize TIM3 PWM\n");
+        }
+      else
+        {
+          ret = pwm_register("/dev/pwm1", pwm3);
+          if (ret < 0)
+            {
+              syslog(LOG_ERR, "ERROR: Failed to register /dev/pwm1: %d\n", ret);
+            }
+          else
+            {
+              syslog(LOG_INFO, "    TIM3 PWM Registered Successfully at /dev/pwm1.\n");
+            }
+        }
+
+      /* Spawn the IMU polling thread dynamically */
+      syslog(LOG_INFO, "[PASIL] Spawning Deterministic IMU Thread (Priority 255)...\n");
+      ret = task_create("pasil_imu", 255, 2048, pasil_imu_task, NULL);
+      if (ret < 0)
+        {
+          syslog(LOG_ERR, "ERROR: Failed to spawn IMU task\n");
+        }
+
       }
 
       /* * 2. Barometer 
@@ -329,6 +387,36 @@ int stm32_bringup(void)
 
     }
 #endif
+
+#ifdef CONFIG_WL_NRF24L01
+  struct spi_dev_s *spi2;
+  
+  syslog(LOG_INFO, "[PASIL] Arming SPI2 for NRF24L01+PA+LNA...\n");
+  
+  /* Configure GPIOs before SPI init */
+  stm32_configgpio(GPIO_NRF24L01_CSN);
+  stm32_configgpio(GPIO_NRF24L01_CE);
+
+  spi2 = stm32_spibus_initialize(2);
+  if (!spi2)
+    {
+      syslog(LOG_ERR, "ERROR: SPI2 bus acquisition failed\n");
+    }
+  else
+    {
+      /* Register using the verified struct */
+      ret = nrf24l01_register(spi2, &g_nrf24l01_config);
+      if (ret < 0)
+        {
+          syslog(LOG_ERR, "ERROR: NRF24L01 registration failed: %d\n", ret);
+        }
+      else
+        {
+          syslog(LOG_INFO, "[PASIL] NRF24L01 initialized at /dev/nrf24l01\n");
+        }
+    }
+#endif
+
 
   return ret;
 }

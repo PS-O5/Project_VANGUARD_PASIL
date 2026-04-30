@@ -31,6 +31,8 @@
 #define QMC5883P_ADDR 0x2C
 #define BMP280_ADDR   0x76
 
+#define CLAMP_PWM(val) ((uint16_t)((val) > PWM_MAX ? PWM_MAX : ((val) < PWM_MIN ? PWM_MIN : (val))))  //Physical safety net
+
 /* Global File Descriptor for ST API Wrapper */
 int pasil_fd_i2c = -1;
 
@@ -99,17 +101,18 @@ static float bmp280_calculate_pressure(int32_t adc_T, int32_t adc_P) {
 
 int pasil_imu_task(int argc, char *argv[]) {
     struct timespec wakeup_time;
-    int fd_imu, fd_pwm;
-    struct pwm_info_s pwm_info;
+    int fd_imu, fd_pwm0, fd_pwm1;
+    struct pwm_info_s pwm0_info;
+    struct pwm_info_s pwm1_info;
+
     uint32_t cycle_count = 0;
     
     float pitch = 0.0f, pitch_accel = 0.0f;
     float pid_error = 0.0f, pid_integral = 0.0f, pid_derivative = 0.0f, last_error = 0.0f;
-    int32_t new_duty_cycle = PWM_NEUTRAL;
 
     int16_t mag_x = 0, mag_y = 0, mag_z = 0;
-    float true_pressure_pa = 0.0f;
     uint16_t laser_dist_mm = 0;
+    float true_pressure_pa = 0.0f;
 
     VL53L0X_Dev_t tof_dev_struct;
     VL53L0X_DEV tof_dev = &tof_dev_struct;
@@ -119,8 +122,31 @@ int pasil_imu_task(int argc, char *argv[]) {
     init_ekf_matrices();
 
     fd_imu = open("/dev/imu0", O_RDONLY);
-    fd_pwm = open("/dev/pwm0", O_RDONLY);
+    fd_pwm0 = open("/dev/pwm0", O_RDWR);
+    fd_pwm1 = open("/dev/pwm1", O_RDWR);
+    if (fd_pwm0 < 0 || fd_pwm1 < 0) {
+        printf("[FATAL] Kinetic Network Offline.\n");
+        return -ENODEV;
+    }
     pasil_fd_i2c = open("/dev/i2c1", O_RDWR);
+
+    /* Configure TIM2 (Motors 1, 2, 3) */
+    pwm0_info.frequency = 50; /* 50Hz Standard ESC/Motor Driver rate */
+    pwm0_info.channels[0].channel = 2; pwm0_info.channels[0].duty = PWM_NEUTRAL; /* PA1 */
+    pwm0_info.channels[1].channel = 3; pwm0_info.channels[1].duty = PWM_NEUTRAL; /* PA2 */
+    pwm0_info.channels[2].channel = 4; pwm0_info.channels[2].duty = PWM_NEUTRAL; /* PA3 */
+    
+    /* Configure TIM3 (Motor 4) */
+    pwm1_info.frequency = 50; 
+    pwm1_info.channels[0].channel = 1; pwm1_info.channels[0].duty = PWM_NEUTRAL; /* PA4 */
+
+    /* Execute the Arming Handshake */
+    ioctl(fd_pwm0, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm0_info));
+    ioctl(fd_pwm0, PWMIOC_START, 0);
+
+    ioctl(fd_pwm1, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm1_info));
+    ioctl(fd_pwm1, PWMIOC_START, 0);
+
 
     if (pasil_fd_i2c >= 0) {
         printf("[PASIL-MASTER] Waking Barometer & Magnetometer...\n");
@@ -142,9 +168,6 @@ int pasil_imu_task(int argc, char *argv[]) {
         VL53L0X_StartMeasurement(tof_dev);
     }
 
-    pwm_info.frequency = 50; pwm_info.duty = PWM_NEUTRAL;
-    ioctl(fd_pwm, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm_info));
-    ioctl(fd_pwm, PWMIOC_START, 0);
 
     clock_gettime(CLOCK_MONOTONIC, &wakeup_time);
 
@@ -227,32 +250,71 @@ int pasil_imu_task(int argc, char *argv[]) {
             }
         }
 
+        /* ---------------------------------------------------------
+         * FLIGHT CONTROL MIXER & KINEMATICS
+         * --------------------------------------------------------- */
+        
+        /* 1. Calculate individual axis PID outputs 
+         * (Roll and Yaw set to 0.0f until Phase 7 RC integration) */
         pid_error = 0.0f - pitch; 
-        pid_integral += pid_error * DT_SEC; pid_derivative = (pid_error - last_error) / DT_SEC;
-        new_duty_cycle = PWM_NEUTRAL + (int32_t)((KP * pid_error) + (KI * pid_integral) + (KD * pid_derivative));
+        pid_integral += pid_error * DT_SEC; 
+        pid_derivative = (pid_error - last_error) / DT_SEC;
+        
+        int32_t pitch_pid_out = (int32_t)((KP * pid_error) + (KI * pid_integral) + (KD * pid_derivative));
+        int32_t roll_pid_out  = 0; /* TODO: Phase 7 */
+        int32_t yaw_pid_out   = 0; /* TODO: Phase 7 */
+        
         last_error = pid_error;
 
-        if (new_duty_cycle > PWM_MAX) new_duty_cycle = PWM_MAX;
-        if (new_duty_cycle < PWM_MIN) new_duty_cycle = PWM_MIN;
-        pwm_info.duty = (uint16_t)new_duty_cycle;
-        ioctl(fd_pwm, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm_info));
+        /* 2. Establish Base Throttle 
+         * For testing, we use neutral. In flight, this comes from the ESP32 NRF24 link. */
+        int32_t throttle_base = PWM_NEUTRAL; 
+
+        /* 3. The Quad-X Kinematic Mixing Matrix 
+         * M1 (Front Right, CCW) = Throttle - Pitch - Roll - Yaw
+         * M2 (Rear Left, CCW)   = Throttle + Pitch + Roll - Yaw
+         * M3 (Front Left, CW)   = Throttle - Pitch + Roll + Yaw
+         * M4 (Rear Right, CW)   = Throttle + Pitch - Roll + Yaw
+         */
+        int32_t m1_target = throttle_base - pitch_pid_out - roll_pid_out - yaw_pid_out;
+        int32_t m2_target = throttle_base + pitch_pid_out + roll_pid_out - yaw_pid_out;
+        int32_t m3_target = throttle_base - pitch_pid_out + roll_pid_out + yaw_pid_out;
+        int32_t m4_target = throttle_base + pitch_pid_out - roll_pid_out + yaw_pid_out;
+
+        /* 4. Actuator Saturation (Hard Clipping) */
+        pwm0_info.channels[0].duty = CLAMP_PWM(m1_target); /* PA1 -> M1 */
+        pwm0_info.channels[1].duty = CLAMP_PWM(m2_target); /* PA2 -> M2 */
+        pwm0_info.channels[2].duty = CLAMP_PWM(m3_target); /* PA3 -> M3 */
+        pwm1_info.channels[0].duty = CLAMP_PWM(m4_target); /* PA4 -> M4 */
+
+        /* 5. Command the Hardware Subsystem */
+        ioctl(fd_pwm0, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm0_info));
+        ioctl(fd_pwm1, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm1_info));
 
         /* --- TACTICAL TELEMETRY (2Hz) --- */
-        if (i % 250 == 0) {
-            /* Added mag_z to the printout to satisfy the compiler */
-            printf("ATT:[%4d] | MAG:[%5d %5d %5d] | BARO:[%8.1f Pa] | LASER:[%4d mm] | PWM:[%5d]\n", 
-                   (int)pitch, mag_x, mag_y, mag_z, true_pressure_pa, laser_dist_mm, (int)new_duty_cycle);
+        if (cycle_count % 250 == 0) {
+            printf("ATT:[%4d] | MAG:[%5d %5d %5d] | BARO:[%8.1f Pa] | LASER:[%4d mm] | M1/M2/M3/M4:[%5d %5d %5d %5d]\n", 
+                   (int)pitch, mag_x, mag_y, mag_z, true_pressure_pa, laser_dist_mm,
+                   (int)pwm0_info.channels[0].duty, (int)pwm0_info.channels[1].duty, 
+                   (int)pwm0_info.channels[2].duty, (int)pwm1_info.channels[0].duty);
         }
     }
 
     /* System Disarm */
-    pwm_info.duty = PWM_MIN;
-    ioctl(fd_pwm, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm_info));
-    ioctl(fd_pwm, PWMIOC_STOP, 0);
+    pwm0_info.channels[0].duty = PWM_MIN;
+    pwm0_info.channels[1].duty = PWM_MIN;
+    pwm0_info.channels[2].duty = PWM_MIN;
+    ioctl(fd_pwm0, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm0_info));
+    ioctl(fd_pwm0, PWMIOC_STOP, 0);
+
+    pwm1_info.channels[0].duty = PWM_MIN;
+    ioctl(fd_pwm1, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm1_info));
+    ioctl(fd_pwm1, PWMIOC_STOP, 0);
+    
+    if (fd_pwm0 >= 0) close(fd_pwm0);
+    if (fd_pwm1 >= 0) close(fd_pwm1);
     
     /* Cleaned up shutdown logic to satisfy GNU GCC strict indentation rules */
-    if (fd_pwm >= 0) { close(fd_pwm); }
-    if (fd_imu >= 0) { close(fd_imu); }
     if (pasil_fd_i2c >= 0) { close(pasil_fd_i2c); }
     
     printf("[PASIL-MASTER] Stack Disarmed. Fleet Assault Complete.\n");

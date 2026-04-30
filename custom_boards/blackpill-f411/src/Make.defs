@@ -12,7 +12,7 @@ CFLAGS += -I$(TOPDIR)/../nuttx-apps/mlearning/cmsis/CMSIS_5/CMSIS/DSP/Include
 CFLAGS += -I$(TOPDIR)/../nuttx-apps/mlearning/cmsis/CMSIS_5/CMSIS/Core/Include
 
 # Include SPI only if we enabled it in menuconfig (Phase 2 Prep)
-ifeq ($(CONFIG_STM32_SPI1),y)
+ifeq ($(CONFIG_STM32_SPI2),y)
 CSRCS += stm32_spi.c
 endif
 

@@ -334,6 +334,7 @@ pasil_ekf.o: pasil_ekf.c \
  /usr/include/newlib/sys/_types.h /usr/include/newlib/machine/_types.h \
  /usr/include/newlib/sys/lock.h /usr/include/newlib/_ansi.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/sys/ioctl.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/wireless/ioctl.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/timers/pwm.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/fixedmath.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/i2c/i2c_master.h \

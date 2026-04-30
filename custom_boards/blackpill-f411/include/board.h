@@ -1,25 +1,3 @@
-/****************************************************************************
- * boards/arm/stm32/nucleo-f411re/include/board.h
- *
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.  The
- * ASF licenses this file to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance with the
- * License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
- * License for the specific language governing permissions and limitations
- * under the License.
- *
- ****************************************************************************/
-
 #ifndef __BOARDS_ARM_STM32_BLACKPILL_F411_INCLUDE_BOARD_H
 #define __BOARDS_ARM_STM32_BLACKPILL_F411_INCLUDE_BOARD_H
 
@@ -332,8 +310,24 @@
 #define GPIO_TIM2_CH1IN (GPIO_TIM2_CH1IN_1 | GPIO_PULLUP)
 #define GPIO_TIM2_CH2IN (GPIO_TIM2_CH2IN_1 | GPIO_PULLUP)
 
-/* TIM2 PWM Alternate Function Mapping */
-#define GPIO_TIM2_CH2OUT GPIO_TIM2_CH2OUT_1
+/* PWM Pinmux Definitions for MX1508 Kinetic Output */
+#define GPIO_TIM2_CH2OUT (GPIO_ALT|GPIO_AF1|GPIO_SPEED_50MHz|GPIO_PUSHPULL|GPIO_PORTA|GPIO_PIN1)
+#define GPIO_TIM2_CH3OUT (GPIO_ALT|GPIO_AF1|GPIO_SPEED_50MHz|GPIO_PUSHPULL|GPIO_PORTA|GPIO_PIN2)
+#define GPIO_TIM2_CH4OUT (GPIO_ALT|GPIO_AF1|GPIO_SPEED_50MHz|GPIO_PUSHPULL|GPIO_PORTA|GPIO_PIN3)
+#define GPIO_TIM3_CH1OUT (GPIO_ALT|GPIO_AF2|GPIO_SPEED_50MHz|GPIO_PUSHPULL|GPIO_PORTA|GPIO_PIN4)
+
+/* =======================================================
+ * NRF24L01+PA+LNA RF TELEMETRY LINK
+ * ======================================================= */
+/* CE: PA8 (Push-Pull Output) */
+#define GPIO_NRF24L01_CE   (GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_50MHz | GPIO_OUTPUT_CLEAR | GPIO_PORTA | GPIO_PIN8)
+
+/* CSN: PB12 (Push-Pull Output, Default High) */
+#define GPIO_NRF24L01_CSN  (GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_50MHz | GPIO_OUTPUT_SET | GPIO_PORTB | GPIO_PIN12)
+
+/* IRQ: PB5 (Floating Input, EXTI configured for falling edge) */
+#define GPIO_NRF24L01_IRQ  (GPIO_INPUT | GPIO_FLOAT | GPIO_EXTI | GPIO_PORTB | GPIO_PIN5)
+
 
 
 #endif /* __BOARDS_ARM_STM32_NUCLEO_F411RE_INCLUDE_BOARD_H */
