@@ -11,7 +11,7 @@ VANGUARD-PASIL is a real-time, safety-critical flight control testbed that bridg
 * **CMSIS-DSP Acceleration:** Hardware FPU acceleration computes a 7x7 Extended Kalman Filter (EKF) to maintain optimal attitude and gyro bias estimates.
 * **Multi-Stage Failsafe:** Safety-critical protection forces zero throttle and attitude levelling upon RF link loss, transitioning to a hard lock/motor stop after 2 seconds of lost connection.
 * **Clean Power Architecture:** Utilizes a star-ground topology and isolated regulators (including a dedicated ultra-low-noise 3.3V LDO for the RF module) to prevent ESC noise from causing brownouts.
-* **Application-Level Sensor Management:** Custom I2C management bypasses kernel conflicts, including forced-mode polling for the BMP280 barometer[cite: 1].
+* **Application-Level Sensor Management:** Custom I2C management bypasses kernel conflicts, including forced-mode polling for the BMP280 barometer.
 
 ## 🛠️ Hardware Stack
 
