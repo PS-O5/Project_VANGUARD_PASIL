@@ -23,6 +23,12 @@
 #define KP 15.0f
 #define KI 0.0f
 #define KD 0.5f
+
+/* INJECT YAW GAINS */
+#define KP_YAW 10.0f /* Yaw relies on counter-torque, needs unique tuning */
+#define KI_YAW 0.0f
+#define KD_YAW 0.0f
+
 #define PWM_NEUTRAL 4915
 #define PWM_MIN     3276
 #define PWM_MAX     6553
@@ -32,6 +38,18 @@
 #define BMP280_ADDR   0x76
 
 #define CLAMP_PWM(val) ((uint16_t)((val) > PWM_MAX ? PWM_MAX : ((val) < PWM_MIN ? PWM_MIN : (val))))  //Physical safety net
+
+/* Standard 32-Byte NRF24 Payload Limit */
+typedef struct __attribute__((packed)) {
+    uint8_t  magic;       
+    uint8_t  state;       
+    int16_t  throttle;    
+    int16_t  pitch;       
+    int16_t  roll;        
+    int16_t  yaw;         
+    uint16_t checksum;    
+} rc_payload_t;
+
 
 /* Global File Descriptor for ST API Wrapper */
 int pasil_fd_i2c = -1;
@@ -108,7 +126,16 @@ int pasil_imu_task(int argc, char *argv[]) {
     uint32_t cycle_count = 0;
     
     float pitch = 0.0f, pitch_accel = 0.0f;
-    float pid_error = 0.0f, pid_integral = 0.0f, pid_derivative = 0.0f, last_error = 0.0f;
+    float roll = 0.0f,  roll_accel = 0.0f;
+    float gx = 0.0f, gy = 0.0f, gz = 0.0f; /* Gyro rates (deg/sec) */
+
+    /* Pitch PID States */
+    float err_p = 0.0f, int_p = 0.0f, der_p = 0.0f, last_p = 0.0f;
+    /* Roll PID States */
+    float err_r = 0.0f, int_r = 0.0f, der_r = 0.0f, last_r = 0.0f;
+    /* Yaw PID States */
+    float err_y = 0.0f, int_y = 0.0f, der_y = 0.0f, last_y = 0.0f;
+
 
     int16_t mag_x = 0, mag_y = 0, mag_z = 0;
     uint16_t laser_dist_mm = 0;
@@ -128,6 +155,12 @@ int pasil_imu_task(int argc, char *argv[]) {
         printf("[FATAL] Kinetic Network Offline.\n");
         return -ENODEV;
     }
+
+    int fd_rf = open("/dev/nrf24l01", O_RDONLY | O_NONBLOCK);
+    if (fd_rf < 0) {
+        printf("[WARN] RF Link Offline. Booting to Failsafe.\n");
+    }
+
     pasil_fd_i2c = open("/dev/i2c1", O_RDWR);
 
     /* Configure TIM2 (Motors 1, 2, 3) */
@@ -179,10 +212,23 @@ int pasil_imu_task(int argc, char *argv[]) {
         /* 500Hz: IMU */
         int16_t raw_mem[16] = {0}; 
         if (read(fd_imu, raw_mem, sizeof(raw_mem)) >= 12) {
-            float gy = (float)raw_mem[1]; 
-            float ax = (float)raw_mem[3]; float ay = (float)raw_mem[4]; float az = (float)raw_mem[5];
+            gx = (float)raw_mem[0]; 
+            gy = (float)raw_mem[1]; 
+            gz = (float)raw_mem[2]; 
+            float ax = (float)raw_mem[3]; 
+            float ay = (float)raw_mem[4]; 
+            float az = (float)raw_mem[5];
+            
+            /* Pitch Complementary Filter */
             pitch_accel = atan2f(-ax, sqrtf(ay*ay + az*az)) * 180.0f / M_PI;
             pitch = 0.98f * (pitch + gy * DT_SEC) + (0.02f) * pitch_accel;
+
+            /* Roll Complementary Filter */
+            roll_accel = atan2f(ay, az) * 180.0f / M_PI;
+            roll = 0.98f * (roll + gx * DT_SEC) + (0.02f) * roll_accel;
+            
+            /* (Yaw angle is tracked by the Magnetometer EKF later; 
+             * the flight loop only needs the 'gz' gyro rate for stability) */
         }
 
         arm_mat_trans_f32(&F, &F_T); arm_mat_mult_f32(&F, &P, &TempMat);
@@ -250,44 +296,82 @@ int pasil_imu_task(int argc, char *argv[]) {
             }
         }
 
+        /* --- RF TELEMETRY INGESTION --- */
+        static rc_payload_t rx_data;
+        static uint32_t last_packet_time = 0;
+        
+        if (fd_rf >= 0) {
+            /* Attempt to read a packet (Non-Blocking) */
+            if (read(fd_rf, &rx_data, sizeof(rc_payload_t)) == sizeof(rc_payload_t)) {
+                /* Verify Packet Integrity */
+                if (rx_data.magic == 0x5A) {
+                    last_packet_time = cycle_count;
+                }
+            }
+        }
+
+        /* --- FAILSAFE & TARGET MAPPING --- */
+        // ... your existing code continues here ...
+        // int32_t throttle_base = PWM_MIN;
+
         /* ---------------------------------------------------------
          * FLIGHT CONTROL MIXER & KINEMATICS
          * --------------------------------------------------------- */
         
         /* 1. Calculate individual axis PID outputs 
-         * (Roll and Yaw set to 0.0f until Phase 7 RC integration) */
-        pid_error = 0.0f - pitch; 
-        pid_integral += pid_error * DT_SEC; 
-        pid_derivative = (pid_error - last_error) / DT_SEC;
-        
-        int32_t pitch_pid_out = (int32_t)((KP * pid_error) + (KI * pid_integral) + (KD * pid_derivative));
-        int32_t roll_pid_out  = 0; /* TODO: Phase 7 */
-        int32_t yaw_pid_out   = 0; /* TODO: Phase 7 */
-        
-        last_error = pid_error;
+         --- FAILSAFE & TARGET MAPPING --- */
+        int32_t throttle_base = PWM_MIN;
+        float target_pitch = 0.0f;
+        float target_roll  = 0.0f;
+        float target_yaw   = 0.0f;
 
-        /* 2. Establish Base Throttle 
-         * For testing, we use neutral. In flight, this comes from the ESP32 NRF24 link. */
-        int32_t throttle_base = PWM_NEUTRAL; 
+        if (fd_rf >= 0 && (cycle_count - last_packet_time) < 50 && rx_data.state == 1) {
+            throttle_base = PWM_MIN + ((rx_data.throttle * (PWM_MAX - PWM_MIN)) / 1000);
+            target_pitch = (float)rx_data.pitch * (30.0f / 1000.0f); /* +/- 30 degrees max */
+            target_roll  = (float)rx_data.roll  * (30.0f / 1000.0f); /* +/- 30 degrees max */
+            target_yaw   = (float)rx_data.yaw   * (45.0f / 1000.0f); /* +/- 45 deg/sec max rotation */
+        }
 
-        /* 3. The Quad-X Kinematic Mixing Matrix 
-         * M1 (Front Right, CCW) = Throttle - Pitch - Roll - Yaw
-         * M2 (Rear Left, CCW)   = Throttle + Pitch + Roll - Yaw
-         * M3 (Front Left, CW)   = Throttle - Pitch + Roll + Yaw
-         * M4 (Rear Right, CW)   = Throttle + Pitch - Roll + Yaw
-         */
+        /* ---------------------------------------------------------
+         * 3-AXIS PID KINETIC CONTROLLER
+         * --------------------------------------------------------- */
+         
+        /* PITCH LOOP (Attitude) */
+        err_p = target_pitch - pitch; 
+        int_p += err_p * DT_SEC; 
+        der_p = (err_p - last_p) / DT_SEC;
+        int32_t pitch_pid_out = (int32_t)((KP * err_p) + (KI * int_p) + (KD * der_p));
+        last_p = err_p;
+
+        /* ROLL LOOP (Attitude) */
+        err_r = target_roll - roll; 
+        int_r += err_r * DT_SEC; 
+        der_r = (err_r - last_r) / DT_SEC;
+        int32_t roll_pid_out  = (int32_t)((KP * err_r) + (KI * int_r) + (KD * der_r));
+        last_r = err_r;
+
+        /* YAW LOOP (Rate)
+         * Notice we subtract 'gz' (current rotational speed), not an absolute angle.
+         * The stick commands how FAST the drone spins, not where it points. */
+        err_y = target_yaw - gz; 
+        int_y += err_y * DT_SEC; 
+        der_y = (err_y - last_y) / DT_SEC;
+        int32_t yaw_pid_out   = (int32_t)((KP_YAW * err_y) + (KI_YAW * int_y) + (KD_YAW * der_y));
+        last_y = err_y;
+
+        /* ---------------------------------------------------------
+         * KINEMATIC MIXER
+         * --------------------------------------------------------- */
         int32_t m1_target = throttle_base - pitch_pid_out - roll_pid_out - yaw_pid_out;
         int32_t m2_target = throttle_base + pitch_pid_out + roll_pid_out - yaw_pid_out;
         int32_t m3_target = throttle_base - pitch_pid_out + roll_pid_out + yaw_pid_out;
         int32_t m4_target = throttle_base + pitch_pid_out - roll_pid_out + yaw_pid_out;
 
-        /* 4. Actuator Saturation (Hard Clipping) */
-        pwm0_info.channels[0].duty = CLAMP_PWM(m1_target); /* PA1 -> M1 */
-        pwm0_info.channels[1].duty = CLAMP_PWM(m2_target); /* PA2 -> M2 */
-        pwm0_info.channels[2].duty = CLAMP_PWM(m3_target); /* PA3 -> M3 */
-        pwm1_info.channels[0].duty = CLAMP_PWM(m4_target); /* PA4 -> M4 */
+        pwm0_info.channels[0].duty = CLAMP_PWM(m1_target); 
+        pwm0_info.channels[1].duty = CLAMP_PWM(m2_target); 
+        pwm0_info.channels[2].duty = CLAMP_PWM(m3_target); 
+        pwm1_info.channels[0].duty = CLAMP_PWM(m4_target); 
 
-        /* 5. Command the Hardware Subsystem */
         ioctl(fd_pwm0, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm0_info));
         ioctl(fd_pwm1, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&pwm1_info));
 
