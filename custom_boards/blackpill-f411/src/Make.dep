@@ -258,11 +258,14 @@ stm32_bringup.o: stm32_bringup.c \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/timers/pwm.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/stm32_pwm.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/board/board.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/stm32_exti.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/hardware/stm32_pinmap.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/sensors/bmp280.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/sensors/vl53l1x.h \
  blackpill-f411.h \
- /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/board.h
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/board.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/wireless/nrf24l01.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/wireless/ioctl.h
 pasil_ekf.o: pasil_ekf.c \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/config.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/stdint.h \
@@ -374,6 +377,39 @@ pasil_ekf.o: pasil_ekf.c \
  vl53l0x_api/vl53l0x_def.h vl53l0x_api/vl53l0x_device.h \
  vl53l0x_api/vl53l0x_types.h vl53l0x_api/vl53l0x_platform.h \
  vl53l0x_api/vl53l0x_platform_log.h vl53l0x_api/vl53l0x_i2c_platform.h
+stm32_spi.o: stm32_spi.c \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/config.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/stdint.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/compiler.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/types.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/inttypes.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/limits.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/limits.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/stdbool.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/spi/spi.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/sys/types.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/errno.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/stm32_gpio.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/irq.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/irq.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/syscall.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/chip/irq.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/stm32/chip.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/stm32/stm32f40xxx_irq.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/armv7-m/irq.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/armv7-m/nvicpri.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/chip/chip.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/chip.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/stm32/irq.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/hardware/stm32_memorymap.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/chip.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/hardware/stm32f40xxx_memorymap.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/hardware/stm32_pinmap.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/hardware/stm32f40xxx_pinmap_legacy.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/hardware/stm32f40xxx_gpio.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/stm32_spi.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/arch/arm/src/chip/hardware/stm32_spi.h \
+ /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/arch/board/board.h
 stm32_appinit.o: stm32_appinit.c \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/nuttx/config.h \
  /home/ps-o5/Projects/VANGUARD-PASIL/nuttx/include/sys/types.h \
